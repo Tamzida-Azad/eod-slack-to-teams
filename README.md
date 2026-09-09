@@ -2,6 +2,8 @@
 
 Reads Slack `#calysta-eod` updates for a calendar day, formats them, and posts to Teams **Calystapro EMR Web Dev**.
 
+**Full walkthrough for anyone new to this project:** see [HOW_IT_WORKS.md](./HOW_IT_WORKS.md).
+
 ## Spec
 
 | Item | Value |

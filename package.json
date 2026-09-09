@@ -1,0 +1,19 @@
+{
+  "name": "eod-slack-to-teams",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Slack #calysta-eod → Teams Calystapro EMR Web Dev nightly digest (no LLM)",
+  "scripts": {
+    "scrape": "node src/scrape-slack-eod.js",
+    "format": "node src/format-eod.js",
+    "post-teams": "node src/post-teams.js",
+    "run-daily": "node src/run-daily.js",
+    "run-daily:dry": "node -e \"process.env.EOD_DRY_RUN='1';require('./src/run-daily.js')\"",
+    "register-task": "powershell -ExecutionPolicy Bypass -File ./scripts/register-task.ps1",
+    "test-format": "node src/test-format-sample.js",
+    "test-scrape-filter": "node src/test-scrape-filter.js"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}

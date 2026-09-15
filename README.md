@@ -1,90 +1,82 @@
-# EOD Slack → Teams (no LLM)
+# EOD Slack → Teams (Vite + Vercel + User OAuth)
 
-Reads Slack `#calysta-eod` updates for a calendar day, formats them, and posts to Teams **Calystapro EMR Web Dev**.
+Reads Slack `#calysta-eod` as **your connected Slack user**, formats the digest, and posts to Teams **Calystapro EMR Web Dev** as **your connected Microsoft user**.
 
-**Full walkthrough for anyone new to this project:** see [HOW_IT_WORKS.md](./HOW_IT_WORKS.md).
+**Walkthrough:** [HOW_IT_WORKS.md](./HOW_IT_WORKS.md)
 
-## Spec
+## Spec (business rules unchanged)
 
 | Item | Value |
 |------|--------|
 | Source | Slack `#calysta-eod` (Asia/Dhaka) |
-| Message window | **12:00 PM – 11:20 PM** that day |
-| Destination | Teams `Calystapro EMR Web Dev` |
-| Profile | Reuses `../teams-slack-task-automation/browser-profile` |
-| Schedule | Mon–Fri **11:30 PM** Asia/Dhaka |
-| Gatekeeper | Up to **10** attempts, **10 min** apart; stop on first success |
-| Catch-up | On wakeup, backfill **every missed weekday** (each with its own date header), then still run that night’s 11:30 PM for today |
-| LLM | None — Playwright scrape + Node format + Teams paste |
+| Message window | **12:00 PM – 11:20 PM** |
+| Destination | Teams `Calystapro EMR Web Dev` (M365 Graph) |
+| Auth | **User OAuth** for Slack + Teams (not a bot, not a webhook) |
+| Schedule | Vercel Cron every 10 min in evening UTC window |
+| Gatekeeper | Up to **10** attempts, **10 min** apart |
 
-## Format
+## Integrations UI
 
-- Header: **EOD Updates** + `MM/DD/YYYY` (the EOD’s calendar date — not the run date)
-- Catch-up footer: `EOD Automation · Catch-up for MM/DD/YYYY · Scheduled by Cursor`
-- **Bold** Slack display names
-- Ticket lines (`#1234`): title before status hyphens; nested `-` status lines; blank line between ticket tasks
-- Simple text bullets: compact (no blank lines between)
-- Blank line between members
+| Page | Purpose |
+|------|---------|
+| `/` | EOD status + dry run / run |
+| `/integrations` | Slack + Teams connection hub |
+| `/integrations/slack` | Connect / reconnect Slack user OAuth |
+| `/integrations/teams` | Connect / reconnect Microsoft user OAuth |
+
+Status badges: **connected** / **expired** / **missing**. Expired → reconnect via OAuth.
+
+Tokens are written to **`.env`** after OAuth (`SLACK_USER_ACCESS_TOKEN`, `TEAMS_USER_ACCESS_TOKEN`, status, expiry, user labels). That file is gitignored. Optionally mirror encrypted to `secrets/tokens.enc` + KV when `TOKEN_ENCRYPTION_KEY` is set. Status APIs never return raw tokens.
 
 ## Setup
 
 ```bash
-cd C:\Users\TAMZIDA\qa-automation\eod-slack-to-teams
 npm install
+cp .env.example .env
 ```
 
-Ensure Teams + Slack are signed in on the shared profile:
+### 1. Encryption key (optional mirror)
 
-```bash
-cd ..\teams-slack-task-automation
-npm run save-auth
-```
+`TOKEN_ENCRYPTION_KEY` is optional. After Connect, tokens are always written into `.env`. If the encryption key is set, a ciphertext mirror is also kept in `secrets/tokens.enc` / KV (needed on Vercel so cron can read tokens).
 
-Register the scheduled task:
+### 2. Slack user OAuth app
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\register-task.ps1
-```
+1. Create a Slack app → **OAuth & Permissions** → User Token Scopes: `channels:history`, `channels:read`, `users:read`, `identify`
+2. Redirect URL: `https://<host>/api/oauth/slack/callback` (and localhost for `vercel dev`)
+3. Set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_REDIRECT_URI`
+4. Open `/integrations/slack` → **Connect** (signs in as you; no bot posting)
+
+### 3. Microsoft Teams user OAuth
+
+1. Azure AD app registration → Web redirect `https://<host>/api/oauth/teams/callback`
+2. Delegated permissions: `ChannelMessage.Send`, `Channel.ReadBasic.All`, `User.Read`, `offline_access`
+3. Set `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `TEAMS_REDIRECT_URI`
+4. Set `TEAMS_TEAM_ID` + `TEAMS_CHANNEL_ID` for **Calystapro EMR Web Dev**
+5. Open `/integrations/teams` → **Connect**
+
+Requires **Microsoft 365 work/school** Teams (Graph). Personal `teams.live.com` is not supported.
+
+### 4. Vercel
+
+- Framework Preset: **Other**
+- Env vars from `.env.example`
+- Link Upstash/KV for token + state mirror
+- `CRON_SECRET` for cron auth
 
 ## Commands
 
 | Command | Purpose |
 |---------|---------|
-| `npm run test-format` | Sample format preview (no browser) |
-| `npm run test-scrape-filter` | Window / catch-up unit checks |
-| `npm run scrape` | Scrape Slack → `logs/eod-messages.json` |
-| `npm run format` | Format last scrape → `logs/eod-payload.txt` |
-| `npm run run-daily:dry` | Orchestrator dry-run (no Teams post) |
-| `npm run run-daily` | Full pipeline (backfill + today if due + retries) |
-| `npm run post-teams` | Post last payload only |
+| `npm test` | Golden + OAuth store + pipeline tests |
+| `npm run build` | Vite production build |
+| `npm run vercel-dev` | Local UI + API |
+| `npm run run-daily:dry` | Dry run (needs Slack OAuth connected) |
+| `npm run run-daily` | Live run (needs Slack + Teams OAuth) |
 
-Dry-run:
+## Verification
 
-```bash
-set EOD_DRY_RUN=1
-npm run run-daily
-```
-
-Force include today’s post before 11:30 PM:
-
-```bash
-set EOD_FORCE_TODAY=1
-npm run run-daily
-```
-
-Faster retries while testing (ms instead of 10 minutes):
-
-```bash
-set EOD_RETRY_INTERVAL_MS=5000
-npm run run-daily
-```
-
-State file: `logs/eod-state.json` (posted / empty / failed days).
-
-## Task
-
-| Setting | Value |
-|---------|--------|
-| Name | `SJ-EOD-Slack-To-Teams` |
-| Schedule | Mon–Fri 11:30 PM Asia/Dhaka |
-| Missed | `StartWhenAvailable` (then gatekeeper retries + multi-day backfill) |
+- `npm test` / `npm run build` green
+- Connect Slack → badge **connected**
+- Connect Teams → badge **connected**
+- Dry run uses Slack user token; live run posts via Graph as Teams user
+- Disconnect or expire → badge **expired** / **missing** → reconnect

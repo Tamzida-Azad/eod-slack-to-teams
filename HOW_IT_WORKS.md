@@ -47,46 +47,41 @@ Clients can tell days apart because the **header date** is always the EOD’s ca
 ## Architecture (no LLM)
 
 ```
-Windows Task Scheduler (Mon–Fri 11:30 PM)
+Vercel Cron / UI Run
         │
         ▼
-scripts/run-daily.bat
+/api/run-daily
         │
-        ▼
-src/run-daily.js          ← orchestrator (backfill + today + retries)
-        │
-        ├─ eod-state.json  ← which days already posted / empty / failed
-        ├─ eod-calendar.js ← Dhaka dates, 12:00–11:20 window, missed days
-        │
-        ├─ scrape-slack-eod.js  → Playwright opens Slack (shared browser profile)
-        ├─ format-eod.js        → plain text + HTML digest
-        └─ post-teams.js        → Playwright pastes into Teams
+        ├─ lib/token-store.js   ← AES-encrypted user OAuth tokens
+        ├─ lib/scrape-slack.js  ← Slack Web API as connected user (xoxp)
+        ├─ lib/format-eod.js
+        └─ lib/post-teams.js    ← Graph channel message as connected user
+
+Integrations UI
+  /integrations/slack  → Slack user OAuth
+  /integrations/teams  → Microsoft user OAuth
 ```
 
 | File | Role |
 |------|------|
-| `src/run-daily.js` | Main entry: decide which days need posting, retry gatekeeper |
-| `src/eod-calendar.js` | Dhaka calendar helpers, message window, schedule checks |
-| `src/eod-state.js` | Persist posted/empty/failed days under `logs/eod-state.json` |
-| `src/scrape-slack-eod.js` | Browser scrape of `#calysta-eod` for a **target date** |
-| `src/format-eod.js` | Build Teams payload (names, tickets, nesting) |
-| `src/post-teams.js` | Open Teams and send the payload |
-| `src/config.js` | Channel IDs, paths, retry defaults |
-| `scripts/register-task.ps1` | Registers Windows task `SJ-EOD-Slack-To-Teams` |
-| `scripts/run-daily.bat` | Task action; appends to `logs/scheduler.log` |
+| `lib/token-store.js` | Encrypted Slack/Teams token store (`secrets/tokens.enc` + KV) |
+| `lib/oauth-slack.js` / `lib/oauth-teams.js` | OAuth start/exchange/refresh |
+| `lib/scrape-slack.js` | Slack history as user |
+| `lib/post-teams.js` | Graph Teams message as user |
+| `api/oauth/*/start.js` + `callback.js` | OAuth redirects |
+| `api/integrations/status.js` | Safe status (no raw tokens) |
+| `src/ui/main.js` | Status + integrations SPA |
+
+**Auth model:** Slack/Teams apps are OAuth clients only. After Connect, user tokens are written into **`.env`** (`SLACK_USER_*`, `TEAMS_USER_*`, status/expiry). All channel reads/posts use those env tokens. If a token expires, status shows **expired**, `.env` is updated, and the pipeline fails closed until reconnect. Optional encrypted mirror: `secrets/tokens.enc` + KV when `TOKEN_ENCRYPTION_KEY` is set.
 
 ---
 
 ## Message selection details
 
-1. Open Slack `#calysta-eod` with the authenticated Chromium profile.
-2. Scroll the message list (including upward for older catch-up days).
-3. Read each message’s timestamp and day divider (`Today` / `Yesterday` / full date).
-4. Keep only messages that resolve to the **target calendar day**.
-5. Keep only those whose clock time is in **12:00 PM – 11:20 PM**.
-6. Prefer messages that look like EOD content (`EOD`, ticket `#1234`, etc.) when mixed content is present.
-
-**Important:** Bare Slack times like `7:58 PM` (without “Today at”) are supported via day dividers / evening logic so evening EODs are not dropped.
+1. Call Slack `conversations.history` for the target day’s Dhaka window (12:00–11:20).
+2. Resolve display names with `users.info`.
+3. Keep only messages whose `ts` falls on the target calendar day inside the window.
+4. Prefer messages that look like EOD content (`EOD`, ticket `#1234`, etc.) when mixed content is present.
 
 Messages **before noon** or **after 11:20 PM** that day are ignored for that day’s digest.
 
@@ -107,21 +102,22 @@ MM/DD/YYYY
 ```
 
 - Header date = the EOD day being reported.
-- Member names are bold.
+- Member names are bold (Adaptive Card / markdown).
 - Ticket lines (`#1234`) may split title vs status on ` - `.
 - Footer identifies scheduled automation (and catch-up when applicable).
 
 ---
 
-## Schedule & Windows task
+## Schedule (Vercel)
 
 | Setting | Value |
 |---------|--------|
-| Task name | `SJ-EOD-Slack-To-Teams` |
-| Trigger | Weekly Mon–Fri at **11:30 PM** (local Dhaka machine time) |
-| Action | `scripts\run-daily.bat` |
-| Missed start | `StartWhenAvailable` — when the PC comes back on, Windows starts the task once |
-| Logon | Interactive (user must be able to run a browser session) |
+| Cron path | `/api/run-daily` |
+| Schedule | `*/10 17-18 * * 1-5` (UTC) ≈ Dhaka evening window |
+| Auth | `Authorization: Bearer CRON_SECRET` |
+| Behavior | One attempt per due day per invoke; retries via later cron ticks |
+
+Local CLI still supports in-process retries (`npm run run-daily`) using the same `lib/` code.
 | Time limit | 2 hours (covers scrape/post + up to ~10×10 min retries) |
 
 Register / refresh the task:

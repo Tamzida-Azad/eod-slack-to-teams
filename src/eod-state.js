@@ -1,45 +1,33 @@
-const fs = require('fs');
-const path = require('path');
-const config = require('./config');
+/**
+ * Sync-compatible state helpers for local scripts (file-backed).
+ * Async store API lives in lib/eod-state.js.
+ */
+const {
+  createFileStore,
+  ensureBaseline: ensureBaselineAsync,
+  markPosted: markPostedAsync,
+  markEmpty: markEmptyAsync,
+  markAttempt: markAttemptAsync,
+  markFailed: markFailedAsync,
+  loadStateSync,
+  saveStateSync,
+} = require('../lib/eod-state');
+const config = require('../lib/config');
 
-const DEFAULT_STATE = { days: {} };
-
-function statePath() {
-  return config.paths.stateFile;
-}
+const store = createFileStore(config.paths.stateFile);
 
 function loadState() {
-  const file = statePath();
-  try {
-    if (!fs.existsSync(file)) return { ...DEFAULT_STATE, days: {} };
-    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return {
-      days: raw.days && typeof raw.days === 'object' ? raw.days : {},
-      baselineKey: raw.baselineKey || null,
-      initializedAt: raw.initializedAt || null,
-    };
-  } catch {
-    return { ...DEFAULT_STATE, days: {} };
-  }
+  return loadStateSync(config.paths.stateFile);
 }
 
 function saveState(state) {
-  fs.mkdirSync(path.dirname(statePath()), { recursive: true });
-  const payload = {
-    updatedAt: new Date().toISOString(),
-    initializedAt: state.initializedAt || null,
-    baselineKey: state.baselineKey || null,
-    days: state.days || {},
-  };
-  fs.writeFileSync(statePath(), JSON.stringify(payload, null, 2), 'utf8');
+  saveStateSync(state, config.paths.stateFile);
 }
 
-/**
- * First run: only catch up ~4 calendar days so we do not flood Teams with old history.
- */
 function ensureBaseline(state, now = new Date()) {
   if (state.baselineKey) return state;
-  const { dhakaParts, addCalendarDays, dateKey } = require('./eod-calendar');
+  // sync path mirroring lib ensureBaseline
+  const { dhakaParts, addCalendarDays, dateKey } = require('../lib/eod-calendar');
   const real = dhakaParts(now);
   state.baselineKey = dateKey(addCalendarDays(real, -4));
   state.initializedAt = new Date().toISOString();
@@ -100,4 +88,10 @@ module.exports = {
   markEmpty,
   markAttempt,
   markFailed,
+  store,
+  ensureBaselineAsync,
+  markPostedAsync,
+  markEmptyAsync,
+  markAttemptAsync,
+  markFailedAsync,
 };

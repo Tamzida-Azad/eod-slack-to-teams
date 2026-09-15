@@ -1,29 +1,19 @@
 {
   "name": "eod-slack-to-teams",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Slack #calysta-eod → Teams Calystapro EMR Web Dev nightly digest (Vite + Vercel)",
-  "type": "commonjs",
+  "description": "Slack #calysta-eod → Teams Calystapro EMR Web Dev nightly digest (no LLM)",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "vercel-dev": "vercel dev",
-    "test": "node --test tests/**/*.test.js",
     "scrape": "node src/scrape-slack-eod.js",
-    "format": "node lib/format-eod.js",
+    "format": "node src/format-eod.js",
     "post-teams": "node src/post-teams.js",
     "run-daily": "node src/run-daily.js",
-    "run-daily:dry": "node -e \"process.env.EOD_DRY_RUN='1';require('./src/run-daily.js').main()\"",
-    "run-daily:once": "node -e \"process.env.EOD_MODE='once';require('./src/run-daily.js').main()\"",
+    "run-daily:dry": "node -e \"process.env.EOD_DRY_RUN='1';require('./src/run-daily.js')\"",
+    "register-task": "powershell -ExecutionPolicy Bypass -File ./scripts/register-task.ps1",
     "test-format": "node src/test-format-sample.js",
-    "test-scrape-filter": "node src/test-scrape-filter.js",
-    "register-task": "powershell -ExecutionPolicy Bypass -File ./scripts/register-task.ps1"
+    "test-scrape-filter": "node src/test-scrape-filter.js"
   },
-  "devDependencies": {
-    "vite": "^6.2.0"
-  },
-  "engines": {
-    "node": ">=18"
+  "dependencies": {
+    "playwright": "^1.62.1"
   }
 }

@@ -1,11 +1,4 @@
-secrets/*
-!secrets/.gitkeep
-*.enc
 node_modules/
 logs/
-dist/
 .env
-.env.local
-.env*.local
 *.log
-.vercel

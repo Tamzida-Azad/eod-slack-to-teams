@@ -1,0 +1,24 @@
+{
+  "messages": [
+    {
+      "author": "Rajib Chowdhury",
+      "timestamp": "8:24 PM",
+      "body": "EOD\nOpportunity Ticket stage automation with respect to associated appointment status\nDuring Calendar opportunity creation: Quick Opportunity Edit option with source (gmb, google, facebook , web)\nDuring Appointment creation from calendar , give option to set appointment status(previously it was always set to booked)"
+    },
+    {
+      "author": "Alauddin Rezvi",
+      "timestamp": "9:38 PM",
+      "body": "EOD:\nAlauddin Rezvi (03/09/2026):\n\n#721: Calling Agent - \n          -Worked on MCP Microservice = Progress : 75% ( Working with CRM and EMR appointment and contacts syncing)"
+    },
+    {
+      "author": "Mohammad Ashikuzzaman",
+      "timestamp": "9:41 PM",
+      "body": "EOD:\n\n#2965: New Request | Revamp the patient memberships module -  Quick Live Issue fix - Fixed some UI change requests from QA and deployed Live - It will be recurring, and faster to make everything smooth before making it available for the real facility\n#3141: Issue | Calysta Auto-Deleting Signed Intake & Consent Forms - Juniper Brown - fixed and deployed Live - It will not happen in the future\n #3142: Client request | Configure Secondary Domain (ethosspa.net) for spa.guru - Passed info to Server team - After they configure the SSL, I will add it into our codebase\n#3143: Client Request | Export all encounters for Ethos - Done - Sent via email"
+    },
+    {
+      "author": "Tamzida Azad",
+      "timestamp": "10:38 PM",
+      "body": "EOD:\n #3062: Change request for the membership revamp with Elavon - 65% done on Training Academy \n Retested the UI and Functional fixes on membership module \nVerified membership revamped kpi report \nVerified membership initiation fee related report and outgoings email \nVerified all sent email and SMS gets stored on patient logs"
+    }
+  ]
+}

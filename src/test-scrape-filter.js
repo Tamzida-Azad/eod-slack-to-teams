@@ -105,6 +105,54 @@ assert(
   needingNight.some((d) => d.key === '2026-09-10' && d.catchUp === false)
 );
 
+// --- (edited) strip + follow-up messages ---
+const {
+  cleanBody,
+  preferEodAndFollowUps,
+} = require('./scrape-slack-eod');
+const { formatEod } = require('./format-eod');
+
+assert(
+  'cleanBody strips trailing (edited)',
+  cleanBody('Appointment list fix. (edited)') === 'Appointment list fix.'
+);
+assert(
+  'cleanBody drops standalone (edited) line',
+  !cleanBody('• Supported Rajib\n• (edited)').includes('edited')
+);
+
+const followUps = preferEodAndFollowUps([
+  { author: 'Tamzida Azad', body: 'EOD:\n #100 done' },
+  { author: 'Tamzida Azad', body: '• Extra task without EOD header' },
+  { author: 'Random', body: 'lunch plans?' },
+]);
+assert('keeps EOD message', followUps.some((m) => /EOD/i.test(m.body)));
+assert(
+  'keeps follow-up bullets from same author',
+  followUps.some((m) => /Extra task/.test(m.body))
+);
+assert(
+  'drops unrelated non-EOD chatter',
+  !followUps.some((m) => /lunch/.test(m.body))
+);
+
+const merged = formatEod({
+  messages: [
+    {
+      author: 'Tamzida Azad',
+      body: 'EOD:\n #100 first batch - done',
+    },
+    {
+      author: 'Tamzida Azad',
+      body: '• Second batch task\n• (edited)',
+    },
+  ],
+}, { date: new Date('2026-09-15T17:00:00+06:00') });
+assert('format merges two posts under one author', merged.personCount === 1);
+assert('format includes first-batch task', /#100 first batch/.test(merged.payloadText));
+assert('format includes follow-up task', /Second batch task/.test(merged.payloadText));
+assert('format has no (edited)', !/\(edited\)/i.test(merged.payloadText));
+
 if (failed) {
   console.error(`\n${failed} assertion(s) failed`);
   process.exit(1);

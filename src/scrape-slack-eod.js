@@ -549,8 +549,53 @@ async function extractMessages(page, window) {
 function cleanBody(body) {
   return String(body || '')
     .replace(/\u00a0/g, ' ')
+    // Slack UI appends "(edited)" when a message was edited — not task content
+    .replace(/\(\s*edited\s*\)/gi, '')
     .replace(/\n{3,}/g, '\n\n')
+    .split(/\r?\n/)
+    .map((l) => l.replace(/[ \t]+$/g, ''))
+    .filter((l) => {
+      const t = l.trim();
+      if (!t) return false;
+      // leftover bullet-only lines after stripping (edited)
+      if (/^[•●▪‣*\-]+\s*$/.test(t)) return false;
+      if (/^\(?\s*edited\s*\)?\.?$/i.test(t)) return false;
+      return true;
+    })
+    .join('\n')
     .trim();
+}
+
+function isEodLikeBody(body) {
+  return /EOD|#\d+|verified|progress|deployed/i.test(String(body || ''));
+}
+
+/** Bullet / multi-line task list without requiring "EOD:" header */
+function looksLikeTaskList(body) {
+  const t = String(body || '').trim();
+  if (!t || t.length < 3) return false;
+  if (/^[•●▪‣*\-]\s+\S+/m.test(t)) return true;
+  // plain lines that are not pure chatter
+  const lines = t.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return lines.length >= 1 && !/^(hi|hello|thanks|ok|okay)\.?$/i.test(t);
+}
+
+/**
+ * Keep EOD-like messages, plus follow-up posts from the same authors
+ * (e.g. 8:00 with "EOD:" then 8:30 with only bullets — no "EOD:" header).
+ * If nothing is EOD-like, keep all in-window messages.
+ */
+function preferEodAndFollowUps(messages) {
+  const list = messages || [];
+  const eodLike = list.filter((m) => isEodLikeBody(m.body));
+  if (eodLike.length === 0) return list;
+
+  const eodAuthors = new Set(eodLike.map((m) => String(m.author || '').trim()).filter(Boolean));
+  return list.filter((m) => {
+    if (isEodLikeBody(m.body)) return true;
+    const author = String(m.author || '').trim();
+    return author && eodAuthors.has(author) && looksLikeTaskList(m.body);
+  });
 }
 
 function splitRawBlocks(messages, window) {
@@ -617,9 +662,7 @@ async function scrapeSlackEod(options = {}) {
     messages = await extractMessages(page, window);
     messages = splitRawBlocks(messages, window);
     messages = messages.filter((m) => m.author && m.body);
-
-    const eodLike = messages.filter((m) => /EOD|#\d+|verified|progress|deployed/i.test(m.body));
-    if (eodLike.length > 0) messages = eodLike;
+    messages = preferEodAndFollowUps(messages);
   } finally {
     await context.close();
   }
@@ -654,6 +697,10 @@ module.exports = {
   dayContextMatchesTarget,
   resolveMessageDateTime,
   dhakaHour,
+  cleanBody,
+  isEodLikeBody,
+  looksLikeTaskList,
+  preferEodAndFollowUps,
 };
 
 if (require.main === module) {

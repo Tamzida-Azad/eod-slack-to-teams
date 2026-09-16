@@ -35,6 +35,8 @@ function isNoiseLine(line) {
   const t = String(line || '').trim();
   if (!t) return true;
   if (/^EOD:?$/i.test(t)) return true;
+  // Slack edit marker scraped as its own line
+  if (/^\(?\s*edited\s*\)?\.?$/i.test(t)) return true;
   // "Alauddin Rezvi (03/09/2026):"
   if (/^.+\(\d{1,2}\/\d{1,2}\/\d{4}\)\s*:?\s*$/.test(t)) return true;
   return false;
@@ -69,9 +71,13 @@ function parseTaskLine(line) {
   let raw = String(line || '').trim();
   // Leading bullet chars from Slack paste
   raw = raw.replace(/^[•●▪‣*\-]+\s*/, '');
+  // Slack "(edited)" marker — never a task
+  raw = raw.replace(/\(\s*edited\s*\)/gi, '').trim();
+  if (!raw || /^\(?\s*edited\s*\)?\.?$/i.test(raw)) return null;
   // Trailing lone hyphen from "Calling Agent -"
   const trailingHyphen = /\s+-\s*$/.test(raw);
   raw = raw.replace(/\s+-\s*$/, '').trim();
+  if (!raw) return null;
 
   const parts = splitHyphenParts(raw);
   if (parts.length === 0) return null;
@@ -118,13 +124,19 @@ function bodyToTasks(body) {
     const asNested = line.match(/^[-–—•]\s*(.+)$/);
     // Continuation nested under previous ticket (Rezvi style)
     if (asNested && tasks.length && !isTicketText(line)) {
-      const text = asNested[1].trim();
-      if (text) tasks[tasks.length - 1].nested.push(text);
+      let text = asNested[1].trim().replace(/\(\s*edited\s*\)/gi, '').trim();
+      if (!text || isNoiseLine(text) || /^\(?\s*edited\s*\)?\.?$/i.test(text)) continue;
+      tasks[tasks.length - 1].nested.push(text);
       continue;
     }
 
     const task = parseTaskLine(line);
-    if (task) tasks.push(task);
+    if (task) {
+      task.nested = (task.nested || [])
+        .map((n) => String(n).replace(/\(\s*edited\s*\)/gi, '').trim())
+        .filter((n) => n && !isNoiseLine(n) && !/^\(?\s*edited\s*\)?\.?$/i.test(n));
+      tasks.push(task);
+    }
   }
 
   return tasks;

@@ -1,46 +1,36 @@
 # EOD Slack → Teams (no LLM)
 
-Reads Slack `#calysta-eod` updates for a calendar day, formats them, and posts to Teams **Calystapro EMR Web Dev**.
+Reads a Slack EOD channel for a calendar day, formats messages, and posts to a Microsoft Teams channel.
 
-**Full walkthrough for anyone new to this project:** see [HOW_IT_WORKS.md](./HOW_IT_WORKS.md).
+**Full walkthrough:** [HOW_IT_WORKS.md](./HOW_IT_WORKS.md).
 
 ## Spec
 
 | Item | Value |
 |------|--------|
-| Source | Slack `#calysta-eod` (Asia/Dhaka) |
-| Message window | **12:00 PM – 11:20 PM** that day |
-| Destination | Teams `Calystapro EMR Web Dev` |
-| Profile | Reuses `../teams-slack-task-automation/browser-profile` |
+| Source | Slack channel (configured in `.env`) |
+| Message window | **12:00 PM – 11:20 PM** Asia/Dhaka that day |
+| Destination | Teams channel (configured in `.env`) |
+| Browser profile | `EOD_BROWSER_PROFILE_DIR` or `./browser-profile` (local only) |
 | Schedule | Mon–Fri **11:30 PM** Asia/Dhaka |
 | Gatekeeper | Up to **10** attempts, **10 min** apart; stop on first success |
-| Catch-up | On wakeup, backfill **every missed weekday** (each with its own date header), then still run that night’s 11:30 PM for today |
+| Catch-up | Backfill missed weekdays, then run tonight’s EOD |
 | LLM | None — Playwright scrape + Node format + Teams paste |
-
-## Format
-
-- Header: **EOD Updates** + `MM/DD/YYYY` (the EOD’s calendar date — not the run date)
-- Catch-up footer: `EOD Automation · Catch-up for MM/DD/YYYY · Scheduled by Cursor`
-- **Bold** Slack display names
-- Ticket lines (`#1234`): title before status hyphens; nested `-` status lines; blank line between ticket tasks
-- Simple text bullets: compact (no blank lines between)
-- Blank line between members
 
 ## Setup
 
 ```bash
-cd C:\Users\TAMZIDA\qa-automation\eod-slack-to-teams
+git clone https://github.com/Tamzida-Azad/eod-slack-to-teams.git
+cd eod-slack-to-teams
 npm install
+npx playwright install chromium
+cp .env.example .env
+# Edit .env with your Slack team/channel IDs and Teams channel name
 ```
 
-Ensure Teams + Slack are signed in on the shared profile:
+Sign in once on the Playwright profile directory referenced by `EOD_BROWSER_PROFILE_DIR` (your own save-auth flow or an existing signed-in profile).
 
-```bash
-cd ..\teams-slack-task-automation
-npm run save-auth
-```
-
-Register the scheduled task:
+Register the scheduled task (Windows):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\register-task.ps1
@@ -65,21 +55,12 @@ set EOD_DRY_RUN=1
 npm run run-daily
 ```
 
-Force include today’s post before 11:30 PM:
-
-```bash
-set EOD_FORCE_TODAY=1
-npm run run-daily
-```
-
-Faster retries while testing (ms instead of 10 minutes):
-
-```bash
-set EOD_RETRY_INTERVAL_MS=5000
-npm run run-daily
-```
-
 State file: `logs/eod-state.json` (posted / empty / failed days).
+
+## Security
+
+- **Do not commit** `.env`, `browser-profile/`, or `logs/` — they may contain session data and message content.
+- Use fictional sample data only in tests; keep real EOD text in local logs.
 
 ## Task
 
@@ -87,4 +68,4 @@ State file: `logs/eod-state.json` (posted / empty / failed days).
 |---------|--------|
 | Name | `SJ-EOD-Slack-To-Teams` |
 | Schedule | Mon–Fri 11:30 PM Asia/Dhaka |
-| Missed | `StartWhenAvailable` (then gatekeeper retries + multi-day backfill) |
+| Missed | `StartWhenAvailable` (gatekeeper retries + multi-day backfill) |

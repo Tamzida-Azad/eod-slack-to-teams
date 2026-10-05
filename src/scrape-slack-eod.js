@@ -367,8 +367,11 @@ function dhakaHour(date = new Date()) {
   return dhakaParts(date).hour;
 }
 
-async function openCalystaEod(page) {
-  const channelId = process.env.SLACK_EOD_CHANNEL_ID || config.slack.channelId;
+async function openEodSlackChannel(page) {
+  const channelSlug = config.slack.channelName.replace(/^#/, '');
+  const channelId =
+    process.env.SLACK_EOD_CHANNEL_ID || process.env.EOD_SLACK_CHANNEL_ID || config.slack.channelId;
+
   if (channelId) {
     const url = `https://app.slack.com/client/${config.slack.teamId}/${channelId}`;
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.timeouts.navigation });
@@ -380,18 +383,21 @@ async function openCalystaEod(page) {
     });
     await page.waitForTimeout(4000);
 
-    const sidebar = page.locator('[data-qa="channel_sidebar_name_calysta-eod"]').first();
+    const sidebar = page
+      .locator(`[data-qa="channel_sidebar_name_${channelSlug}"]`)
+      .first();
     if (await sidebar.count()) {
       await sidebar.click({ timeout: config.timeouts.action });
       await page.waitForTimeout(4000);
     } else {
-      throw new Error('Could not open #calysta-eod — set SLACK_EOD_CHANNEL_ID');
+      throw new Error(`Could not open #${channelSlug} — set EOD_SLACK_CHANNEL_ID in .env`);
     }
   }
 
   const header = await page.locator('[data-qa="channel_name"]').innerText().catch(() => '');
-  if (!/calysta-eod/i.test(header)) {
-    throw new Error(`Expected #calysta-eod but channel header is "${header}"`);
+  const slugPattern = new RegExp(channelSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  if (!slugPattern.test(header)) {
+    throw new Error(`Expected #${channelSlug} but channel header is "${header}"`);
   }
 }
 
@@ -652,11 +658,13 @@ async function scrapeSlackEod(options = {}) {
 
   let messages = [];
   try {
-    await openCalystaEod(page);
+    await openEodSlackChannel(page);
 
     const body = await page.locator('body').innerText().catch(() => '');
     if (/sign in to your workspace|enter your email|magic code/i.test(body.slice(0, 600))) {
-      throw new Error('Slack login wall — sign in using teams-slack-task-automation npm run save-auth');
+      throw new Error(
+        'Slack login wall — sign in on the Playwright browser profile (see README / EOD_BROWSER_PROFILE_DIR)'
+      );
     }
 
     messages = await extractMessages(page, window);

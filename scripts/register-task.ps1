@@ -1,4 +1,4 @@
-# Registers Windows Scheduled Task: Slack #calysta-eod to Teams Calystapro EMR Web Dev
+# Registers Windows Scheduled Task: Slack EOD channel -> Teams (see .env)
 # Cadence: weekdays 11:30 PM local Asia/Dhaka (GMT+6)
 # Message window: 12:00 PM – 11:20 PM that day
 # StartWhenAvailable: catch-up when PC comes back; Node gatekeeper retries up to 10x / 10 min
@@ -14,9 +14,9 @@ if (-not (Test-Path $batPath)) {
   throw "Missing runner: $batPath"
 }
 
-$profile = Join-Path (Split-Path -Parent $projectRoot) 'teams-slack-task-automation\browser-profile'
-if (-not (Test-Path $profile)) {
-  Write-Warning "Browser profile not found at $profile - sign in via teams-slack-task-automation first."
+$envFile = Join-Path $projectRoot '.env'
+if (-not (Test-Path $envFile)) {
+  Write-Warning "Missing .env — copy .env.example and set EOD_BROWSER_PROFILE_DIR before scheduling."
 }
 
 $action = New-ScheduledTaskAction -Execute $batPath -WorkingDirectory $projectRoot
@@ -30,7 +30,7 @@ $settings = New-ScheduledTaskSettingsSet `
 
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 
-$description = 'EOD Slack calysta-eod to Teams Calystapro EMR Web Dev. Weekdays 11:30 PM Asia/Dhaka GMT+6. No LLM.'
+$description = 'EOD Slack to Teams digest. Weekdays 11:30 PM Asia/Dhaka. Configure channels in .env.'
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description $description -Force | Out-Null
 

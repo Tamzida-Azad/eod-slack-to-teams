@@ -1,4 +1,5 @@
 node_modules/
+browser-profile/
 logs/
 .env
 *.log

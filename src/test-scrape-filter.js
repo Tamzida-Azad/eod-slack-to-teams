@@ -1,6 +1,13 @@
 /**
  * Unit checks: EOD window, target-day filter, backfill day list (no browser).
  */
+if (!process.env.EOD_SLACK_TEAM_ID) {
+  process.env.EOD_SLACK_WORKSPACE_URL = 'https://example.slack.com/';
+  process.env.EOD_SLACK_TEAM_ID = 'T0000000000';
+  process.env.EOD_SLACK_CHANNEL_ID = 'C0000000000';
+  process.env.EOD_TEAMS_CHANNEL_NAME = 'Example Teams Channel';
+}
+
 const {
   parseSlackTimestamp,
   isTargetDayMessage,
@@ -118,12 +125,12 @@ assert(
 );
 assert(
   'cleanBody drops standalone (edited) line',
-  !cleanBody('• Supported Rajib\n• (edited)').includes('edited')
+  !cleanBody('• Supported Casey\n• (edited)').includes('edited')
 );
 
 const followUps = preferEodAndFollowUps([
-  { author: 'Tamzida Azad', body: 'EOD:\n #100 done' },
-  { author: 'Tamzida Azad', body: '• Extra task without EOD header' },
+  { author: 'Taylor Example', body: 'EOD:\n #100 done' },
+  { author: 'Taylor Example', body: '• Extra task without EOD header' },
   { author: 'Random', body: 'lunch plans?' },
 ]);
 assert('keeps EOD message', followUps.some((m) => /EOD/i.test(m.body)));
@@ -139,11 +146,11 @@ assert(
 const merged = formatEod({
   messages: [
     {
-      author: 'Tamzida Azad',
+      author: 'Taylor Example',
       body: 'EOD:\n #100 first batch - done',
     },
     {
-      author: 'Tamzida Azad',
+      author: 'Taylor Example',
       body: '• Second batch task\n• (edited)',
     },
   ],

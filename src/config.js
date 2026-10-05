@@ -1,23 +1,38 @@
 const path = require('path');
+const { loadEnv } = require('./load-env');
+
+loadEnv();
 
 const rootDir = path.resolve(__dirname, '..');
-const teamsSlackRoot = path.resolve(rootDir, '..', 'teams-slack-task-automation');
+
+function required(name) {
+  const value = process.env[name];
+  if (value === undefined || value === '') {
+    throw new Error(
+      `Missing ${name}. Copy .env.example to .env and set Slack/Teams values.`
+    );
+  }
+  return value;
+}
+
+const browserProfile = process.env.EOD_BROWSER_PROFILE_DIR
+  ? path.resolve(process.env.EOD_BROWSER_PROFILE_DIR)
+  : path.join(rootDir, 'browser-profile');
 
 module.exports = {
   rootDir,
   slack: {
-    workspaceUrl: 'https://sjinnovation.slack.com/',
-    teamId: 'T0285LK1G',
-    channelName: 'calysta-eod',
-    channelId: 'C0BES5FDJV8',
+    workspaceUrl: required('EOD_SLACK_WORKSPACE_URL'),
+    teamId: required('EOD_SLACK_TEAM_ID'),
+    channelName: process.env.EOD_SLACK_CHANNEL_NAME || 'eod-updates',
+    channelId: required('EOD_SLACK_CHANNEL_ID'),
   },
   teams: {
-    url: 'https://teams.live.com/v2/',
-    channelName: 'Calystapro EMR Web Dev',
+    url: process.env.EOD_TEAMS_URL || 'https://teams.live.com/v2/',
+    channelName: required('EOD_TEAMS_CHANNEL_NAME'),
   },
   paths: {
-    // Reuse authenticated Teams+Slack profile from teams-slack project
-    browserProfile: path.join(teamsSlackRoot, 'browser-profile'),
+    browserProfile,
     logsDir: path.join(rootDir, 'logs'),
     messagesJson: path.join(rootDir, 'logs', 'eod-messages.json'),
     payloadTxt: path.join(rootDir, 'logs', 'eod-payload.txt'),

@@ -118,8 +118,12 @@ async function postToTeams(payloadText, payloadHtml, options = {}) {
     await page.waitForTimeout(5000);
 
     const body = await page.locator('body').innerText().catch(() => '');
-    if (/sign in|enter password|pick an account/i.test(body.slice(0, 800)) && !/Chat|Calysta/i.test(body)) {
-      throw new Error('Teams login wall — run save-auth in teams-slack-task-automation');
+    const channelHint = config.teams.channelName.slice(0, 24);
+    if (
+      /sign in|enter password|pick an account/i.test(body.slice(0, 800)) &&
+      !new RegExp(channelHint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(body)
+    ) {
+      throw new Error('Teams login wall — sign in on the Playwright browser profile (see README)');
     }
 
     await openTeamsChannel(page, config.teams.channelName);

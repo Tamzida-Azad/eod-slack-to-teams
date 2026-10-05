@@ -97,7 +97,7 @@ async function attemptDay(day, log, dryRun) {
     return { ok: true, empty: true, updateCount: 0 };
   }
 
-  log.info(`Posting ${dateLabel} to Teams Calystapro EMR Web Dev`);
+  log.info(`Posting ${dateLabel} to Teams ${config.teams.channelName}`);
   const posted = await postToTeams(formatted.payloadText, formatted.payloadHtml, {
     headed: process.env.EOD_HEADED === '1',
     blocks: formatted.blocks,

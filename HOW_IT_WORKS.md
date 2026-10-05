@@ -9,7 +9,7 @@ This document explains the **eod-slack-to-teams** automation for anyone who need
 
 ## What it does (one sentence)
 
-Every weekday night it reads messages from Slack `#calysta-eod` for that day (12:00 PM–11:20 PM Asia/Dhaka), formats them, and posts **EOD Updates** to Teams channel **Calystapro EMR Web Dev**.
+Every weekday night it reads messages from your configured Slack EOD channel for that day (12:00 PM–11:20 PM Asia/Dhaka), formats them, and posts **EOD Updates** to your configured Teams channel.
 
 ---
 
@@ -18,8 +18,8 @@ Every weekday night it reads messages from Slack `#calysta-eod` for that day (12
 | Rule | Detail |
 |------|--------|
 | Timezone | **Asia/Dhaka (GMT+6)** for all date/time decisions |
-| Source | Slack channel `#calysta-eod` (SJ Innovation workspace) |
-| Destination | Teams **Calystapro EMR Web Dev** |
+| Source | Slack channel (`EOD_SLACK_CHANNEL_NAME` / ID in `.env`) |
+| Destination | Teams channel (`EOD_TEAMS_CHANNEL_NAME` in `.env`) |
 | Which messages count | Posted on that calendar day between **12:00 PM and 11:20 PM** inclusive |
 | When it posts | Mon–Fri **11:30 PM** Dhaka |
 | Weekends | No scheduled post; Saturday/Sunday are not EOD days |
@@ -40,7 +40,7 @@ Assume PC was off Mon 8th and Tue 9th nights, and wakes **Wed 10th at 11:00 AM**
 
 Clients can tell days apart because the **header date** is always the EOD’s calendar date (not the run date). Catch-up posts also use footer:
 
-`EOD Automation · Catch-up for MM/DD/YYYY · Scheduled by Cursor`
+`EOD Automation · Catch-up for MM/DD/YYYY`
 
 ---
 
@@ -68,7 +68,7 @@ src/run-daily.js          ← orchestrator (backfill + today + retries)
 | `src/run-daily.js` | Main entry: decide which days need posting, retry gatekeeper |
 | `src/eod-calendar.js` | Dhaka calendar helpers, message window, schedule checks |
 | `src/eod-state.js` | Persist posted/empty/failed days under `logs/eod-state.json` |
-| `src/scrape-slack-eod.js` | Browser scrape of `#calysta-eod` for a **target date** |
+| `src/scrape-slack-eod.js` | Browser scrape of the EOD Slack channel for a **target date** |
 | `src/format-eod.js` | Build Teams payload (names, tickets, nesting) |
 | `src/post-teams.js` | Open Teams and send the payload |
 | `src/config.js` | Channel IDs, paths, retry defaults |
@@ -79,7 +79,7 @@ src/run-daily.js          ← orchestrator (backfill + today + retries)
 
 ## Message selection details
 
-1. Open Slack `#calysta-eod` with the authenticated Chromium profile.
+1. Open the configured Slack EOD channel with the authenticated Chromium profile.
 2. Scroll the message list (including upward for older catch-up days).
 3. Read each message’s timestamp and day divider (`Today` / `Yesterday` / full date).
 4. Keep only messages that resolve to the **target calendar day**.
@@ -127,7 +127,7 @@ MM/DD/YYYY
 Register / refresh the task:
 
 ```powershell
-cd C:\Users\TAMZIDA\qa-automation\eod-slack-to-teams
+cd path\to\eod-slack-to-teams
 powershell -ExecutionPolicy Bypass -File .\scripts\register-task.ps1
 ```
 
@@ -172,26 +172,17 @@ Days already `posted` / `empty` / `failed` are not auto-reposted.
 
 ## Auth / browser profile
 
-Uses the **same** Playwright persistent profile as the sibling project:
+Playwright uses the directory in `EOD_BROWSER_PROFILE_DIR` (default: `./browser-profile` in this repo). That profile must be signed into **Slack** and **Teams**. If a login wall appears, re-authenticate on that profile using your org’s save-auth flow.
 
-`../teams-slack-task-automation/browser-profile`
-
-That profile must already be signed into **Slack** and **Teams**.  
-If a login wall appears, stop and re-auth:
-
-```bash
-cd ..\teams-slack-task-automation
-npm run save-auth
-```
-
-Never commit the browser profile or `.env` secrets.
+Copy `.env.example` → `.env` and set Slack/Teams channel IDs and names there — never commit `.env` or the browser profile.
 
 ---
 
 ## How to run manually
 
 ```bash
-cd C:\Users\TAMZIDA\qa-automation\eod-slack-to-teams
+cd path\to\eod-slack-to-teams
+cp .env.example .env   # then edit
 npm install
 ```
 
@@ -216,6 +207,7 @@ npm install
 | `EOD_MAX_ATTEMPTS` | Override max retries (default 10) |
 | `EOD_LOOKBACK_DAYS` | How far back to scan for missed weekdays (default 7) |
 | `EOD_TARGET_DATE=YYYY-MM-DD` | When running `npm run scrape`, force that target day |
+| `.env` | `EOD_SLACK_*`, `EOD_TEAMS_CHANNEL_NAME`, `EOD_BROWSER_PROFILE_DIR` (required for production) |
 
 ---
 
@@ -237,8 +229,8 @@ npm install
 | Symptom | Likely cause | What to do |
 |---------|--------------|------------|
 | Task never ran at 11:30 | PC off / asleep / not interactively logged on | Turn on PC; `StartWhenAvailable` + catch-up should backfill |
-| Ran but “No EOD updates” | Nobody posted in 12:00–11:20, or timestamps not resolved to that day | Check Slack `#calysta-eod`; inspect `eod-messages.json` |
-| Login wall | Browser profile session expired | Re-run `npm run save-auth` in teams-slack project |
+| Ran but “No EOD updates” | Nobody posted in 12:00–11:20, or timestamps not resolved to that day | Check your Slack EOD channel; inspect `eod-messages.json` |
+| Login wall | Browser profile session expired | Re-sign in on `EOD_BROWSER_PROFILE_DIR` |
 | Posted wrong day | Rare filter bug / wrong target | Check pipeline log `target` / payload header date |
 | Stuck retrying | Transient Teams/Slack error | Wait for gatekeeper; check `eod-state.json` and pipeline logs |
 
@@ -247,8 +239,8 @@ npm install
 ## Setup checklist (new machine)
 
 1. Clone https://github.com/Tamzida-Azad/eod-slack-to-teams  
-2. Ensure sibling folder `teams-slack-task-automation` exists with a signed-in `browser-profile`  
-3. `npm install` in this repo  
+2. Copy `.env.example` → `.env` and set Slack/Teams values  
+3. Sign in on the Playwright profile path in `.env`; `npm install` in this repo  
 4. `npm run run-daily:dry` once to verify scrape/format  
 5. Register the Windows scheduled task with `scripts\register-task.ps1`  
 6. Confirm next run time: `Get-ScheduledTaskInfo` for `SJ-EOD-Slack-To-Teams`
@@ -257,7 +249,7 @@ npm install
 
 ## What this project does *not* do
 
-- Does **not** use an LLM / Cursor agent for categorization  
+- Does **not** use an LLM for categorization  
 - Does **not** post on Saturday or Sunday as normal EOD days  
 - Does **not** invent EODs — only Slack messages already written by the team  
 - Does **not** replace human judgment if Slack content is wrong or incomplete  

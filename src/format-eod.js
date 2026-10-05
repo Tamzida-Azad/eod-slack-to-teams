@@ -1,14 +1,14 @@
 /**
- * Format Slack #calysta-eod messages into Teams EOD Updates text + HTML.
+ * Format Slack EOD channel messages into Teams EOD Updates text + HTML.
  *
  * Rules (locked with user):
  * - Header: EOD Updates + MM/DD/YYYY
  * - Bold member names (Slack display name)
  * - Ticket lines (#1234): split on " - "; nest status segments; blank line before each ticket task
- * - Name-like mid segments (e.g. Juniper Brown) stay in title
+ * - Name-like mid segments (e.g. proper names in ticket titles) stay in title
  * - Simple bullets (no #ticket): compact, no blank lines between them
  * - Blank line between members
- * - Footer: italic EOD Automation · Scheduled by Cursor
+ * - Footer: italic EOD Automation line (optional catch-up date)
  */
 
 function dhakaDateParts(date = new Date()) {
@@ -52,7 +52,7 @@ function isStatusLike(segment) {
   ) {
     return true;
   }
-  // Short proper-name style → keep in title (e.g. Juniper Brown)
+  // Short proper-name style → keep in title (e.g. patient or client names in tickets)
   const words = s.split(/\s+/).filter(Boolean);
   if (words.length <= 3 && /^[A-Za-z]/.test(s) && !/[#|:]/.test(s)) {
     return false;
@@ -174,8 +174,8 @@ function formatEod(scrape, options = {}) {
   });
 
   const FOOTER = options.catchUp
-    ? `EOD Automation · Catch-up for ${dateLabel} · Scheduled by Cursor`
-    : 'EOD Automation · Scheduled by Cursor';
+    ? `EOD Automation · Catch-up for ${dateLabel}`
+    : 'EOD Automation';
 
   const payloadText = [
     header,

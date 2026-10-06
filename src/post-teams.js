@@ -45,8 +45,67 @@ async function openTeamsChannel(page, channelName) {
 }
 
 /**
- * Type into Teams composer with real Ctrl+B / Ctrl+I so formatting survives send.
- * Enter sends the message in Teams — use Shift+Enter for newlines.
+ * Teams treats ":)" / ":D" as emoji shortcodes while typing. That popup steals
+ * caret/Enter handling so the next Shift+Enter may no-op — and the following
+ * member name gets glued onto the previous bullet (e.g. "repos :) Alauddin Rezvi").
+ * Convert shortcodes to Unicode so the picker never opens.
+ */
+function sanitizeForTeamsTyping(text) {
+  return String(text || '')
+    .replace(/:-\)/g, '🙂')
+    .replace(/:\)/g, '🙂')
+    .replace(/:-\(/g, '🙁')
+    .replace(/:\(/g, '🙁')
+    .replace(/:D/g, '😃')
+    .replace(/;-?\)/g, '😉');
+}
+
+/**
+ * Type one run with the keyboard only (Teams CKEditor-safe).
+ *
+ * Bold/italic: type → select line (Shift+Home) → Ctrl+B/I → End (collapse).
+ * Do NOT use DOM insertNode/insertHTML here — those drop names or hit TrustedHTML.
+ * Do NOT leave a selection when returning — Shift+Enter would eat the last char.
+ * Do NOT press Escape after typing — it can blur the composer and drop later lines.
+ */
+async function typeWithStyle(page, text, style) {
+  const value = sanitizeForTeamsTyping(text);
+  if (!value) return;
+
+  await page.keyboard.type(value, { delay: 3 });
+
+  if (style !== 'bold' && style !== 'italic') return;
+
+  await page.waitForTimeout(40);
+  await page.keyboard.press('End');
+  await page.keyboard.press('Shift+Home');
+  await page.keyboard.press(style === 'bold' ? 'Control+B' : 'Control+I');
+  await page.keyboard.press('End');
+  await page.waitForTimeout(40);
+
+  const cmd = style === 'bold' ? 'bold' : 'italic';
+  const stillOn = await page.evaluate((c) => {
+    try {
+      return document.queryCommandState(c);
+    } catch {
+      return false;
+    }
+  }, cmd);
+  if (stillOn) {
+    await page.keyboard.press(style === 'bold' ? 'Control+B' : 'Control+I');
+  }
+}
+
+async function breakLine(page) {
+  await page.keyboard.press('End');
+  await page.waitForTimeout(40);
+  await page.keyboard.press('Shift+Enter');
+  await page.waitForTimeout(40);
+}
+
+/**
+ * Type into Teams composer. Enter sends — use Shift+Enter for newlines.
+ * Never re-click the composer mid-loop (that resets caret and merges lines).
  */
 async function typeBlocks(page, blocks) {
   const composer = page
@@ -58,7 +117,6 @@ async function typeBlocks(page, blocks) {
   await composer.click();
   await page.waitForTimeout(200);
 
-  // Clear draft
   await page.keyboard.press('Control+A');
   await page.keyboard.press('Backspace');
   await page.waitForTimeout(100);
@@ -69,23 +127,34 @@ async function typeBlocks(page, blocks) {
 
     if (block.style === 'spacer') {
       await page.keyboard.type(' ');
-      if (!isLast) await page.keyboard.press('Shift+Enter');
+      if (!isLast) await breakLine(page);
       continue;
     }
 
-    if (block.style === 'bold') {
-      await page.keyboard.press('Control+B');
-      await page.keyboard.type(block.text, { delay: 5 });
-      await page.keyboard.press('Control+B');
-    } else if (block.style === 'italic') {
-      await page.keyboard.press('Control+I');
-      await page.keyboard.type(block.text, { delay: 5 });
-      await page.keyboard.press('Control+I');
-    } else {
-      await page.keyboard.type(block.text, { delay: 2 });
-    }
+    await typeWithStyle(page, block.text, block.style || 'normal');
 
-    if (!isLast) await page.keyboard.press('Shift+Enter');
+    if (!isLast) await breakLine(page);
+  }
+
+  // Fail closed: each member name must appear on its own line (not glued after a bullet).
+  const draft = (await composer.innerText().catch(() => '')) || '';
+  const lines = draft
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\u00a0/g, ' ').trim())
+    .filter(Boolean);
+  const names = blocks
+    .filter((b) => b.style === 'bold' && b.text && b.text !== 'EOD Updates')
+    .map((b) => b.text);
+  const bad = names.filter((n) => {
+    const hit = lines.find((l) => l.includes(n));
+    if (!hit) return true;
+    if (/[•\-]/.test(hit)) return true;
+    return hit !== n && !hit.startsWith(n);
+  });
+  if (bad.length) {
+    throw new Error(
+      `Teams draft member name(s) missing or merged into another line: ${bad.join(', ')} — aborting send. Draft lines: ${JSON.stringify(lines.slice(0, 20))}`
+    );
   }
 }
 
@@ -194,6 +263,8 @@ module.exports = {
   postToTeams,
   plainToHtml,
   typeBlocks,
+  typeWithStyle,
+  sanitizeForTeamsTyping,
 };
 
 if (require.main === module) {

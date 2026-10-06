@@ -3,7 +3,7 @@
  *
  * Rules (locked with user):
  * - Header: EOD Updates + MM/DD/YYYY
- * - Bold member names (Slack display name)
+ * - Bold member names (Slack display name, emojis stripped)
  * - Ticket lines (#1234): split on " - "; nest status segments; blank line before each ticket task
  * - Name-like mid segments (e.g. proper names in ticket titles) stay in title
  * - Simple bullets (no #ticket): compact, no blank lines between them
@@ -143,6 +143,28 @@ function bodyToTasks(body) {
 }
 
 /**
+ * Slack display names often include status emojis (🌿, 🔥, :smile:).
+ * Strip those for Teams EOD headers — keep the person's name only.
+ */
+function cleanMemberName(name) {
+  let s = String(name || '').trim();
+  if (!s) return 'Unknown';
+
+  s = s.replace(/:[a-z0-9_+-]+:/gi, '');
+  s = s.replace(/:-?\)|:-?\(|;-?\)|:D/gi, '');
+  try {
+    s = s.replace(/\p{Extended_Pictographic}/gu, '');
+  } catch {
+    // older engines — fall through to ranges below
+  }
+  s = s.replace(/[\u{1F300}-\u{1FAFF}]/gu, '');
+  s = s.replace(/[\u2600-\u27BF]/g, '');
+  s = s.replace(/[\uFE0E\uFE0F\u200D\u20E3]/g, '');
+  s = s.replace(/\s+/g, ' ').trim();
+  return s || 'Unknown';
+}
+
+/**
  * @param {{ messages: Array<{ author: string, body: string, timestamp?: string }> }} scrape
  * @param {{ date?: Date, catchUp?: boolean, dateLabel?: string }} [options]
  */
@@ -152,7 +174,7 @@ function formatEod(scrape, options = {}) {
   const byAuthor = new Map();
 
   for (const msg of scrape.messages || []) {
-    const author = String(msg.author || '').trim() || 'Unknown';
+    const author = cleanMemberName(msg.author);
     if (!byAuthor.has(author)) byAuthor.set(author, []);
     byAuthor.get(author).push(...bodyToTasks(msg.body));
   }
@@ -293,6 +315,7 @@ module.exports = {
   dhakaDateParts,
   isNoiseLine,
   isTicketText,
+  cleanMemberName,
 };
 
 if (require.main === module) {

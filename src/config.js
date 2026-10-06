@@ -44,6 +44,8 @@ module.exports = {
     maxAttempts: Number(process.env.EOD_MAX_ATTEMPTS || 10),
     /** Minutes between failed attempts */
     retryIntervalMinutes: Number(process.env.EOD_RETRY_INTERVAL_MINUTES || 10),
+    /** Abort a hung Teams post so the gatekeeper can retry */
+    postTimeoutMs: Number(process.env.EOD_POST_TIMEOUT_MS || 5 * 60 * 1000),
   },
   timeouts: {
     navigation: 60_000,

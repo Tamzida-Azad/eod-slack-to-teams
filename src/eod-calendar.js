@@ -88,8 +88,9 @@ function isAtOrAfterSchedule(now = new Date()) {
 function isDayComplete(state, key) {
   const entry = state?.days?.[key];
   if (!entry) return false;
-  // failed = exhausted gatekeeper; do not keep auto-retrying forever
-  return entry.status === 'posted' || entry.status === 'empty' || entry.status === 'failed';
+  // Only posted/empty are done. `failed` and `pending` stay eligible so the
+  // next scheduled recovery run (every 10 min) can try again after a crash/kill.
+  return entry.status === 'posted' || entry.status === 'empty';
 }
 
 /**

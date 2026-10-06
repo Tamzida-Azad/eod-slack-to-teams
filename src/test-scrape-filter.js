@@ -112,6 +112,25 @@ assert(
   needingNight.some((d) => d.key === '2026-09-10' && d.catchUp === false)
 );
 
+const needingFailed = listDaysNeedingPost(
+  {
+    baselineKey: '2026-09-07',
+    days: {
+      '2026-09-08': { status: 'failed', attempts: 10 },
+      '2026-09-09': { status: 'posted' },
+    },
+  },
+  nowSep10
+);
+assert(
+  'failed day stays eligible for recovery retry',
+  needingFailed.some((d) => d.key === '2026-09-08')
+);
+assert(
+  'posted day is not re-queued',
+  !needingFailed.some((d) => d.key === '2026-09-09')
+);
+
 // --- (edited) strip + follow-up messages ---
 const {
   cleanBody,
@@ -159,6 +178,47 @@ assert('format merges two posts under one author', merged.personCount === 1);
 assert('format includes first-batch task', /#100 first batch/.test(merged.payloadText));
 assert('format includes follow-up task', /Second batch task/.test(merged.payloadText));
 assert('format has no (edited)', !/\(edited\)/i.test(merged.payloadText));
+
+const { cleanMemberName } = require('./format-eod');
+assert(
+  'cleanMemberName strips trailing emoji',
+  cleanMemberName('Rajib Chowdhury 🔥') === 'Rajib Chowdhury'
+);
+assert(
+  'cleanMemberName strips leading emoji and shortcode',
+  cleanMemberName('🌿 Alauddin Rezvi :smile:') === 'Alauddin Rezvi'
+);
+assert(
+  'cleanMemberName strips text emoticon',
+  cleanMemberName('Tamzida Azad :)') === 'Tamzida Azad'
+);
+
+const emojiAuthor = formatEod(
+  {
+    messages: [
+      {
+        author: 'Mohammad Ashikuzzaman 🚀',
+        body: 'EOD:\n • Initiation work - done',
+      },
+    ],
+  },
+  { date: new Date('2026-10-05T17:00:00+06:00') }
+);
+assert(
+  'format EOD header has no emoji in member name',
+  /\*Mohammad Ashikuzzaman\*/.test(emojiAuthor.payloadText) &&
+    !/🚀/.test(emojiAuthor.payloadText)
+);
+assert(
+  'format blocks bold name has no emoji',
+  emojiAuthor.blocks.some((b) => b.style === 'bold' && b.text === 'Mohammad Ashikuzzaman')
+);
+
+const { sanitizeForTeamsTyping } = require('./post-teams');
+assert(
+  'sanitizeForTeamsTyping converts smile shortcode',
+  sanitizeForTeamsTyping('repos :)') === 'repos 🙂'
+);
 
 if (failed) {
   console.error(`\n${failed} assertion(s) failed`);

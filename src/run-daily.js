@@ -27,6 +27,20 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function createLogger() {
   fs.mkdirSync(config.paths.logsDir, { recursive: true });
   const filePath = path.join(config.paths.logsDir, `pipeline-${stamp()}.log`);
@@ -51,9 +65,10 @@ function createLogger() {
 
 /**
  * One scrape → format → Teams attempt for a single calendar day.
+ * Checkpoints `pending` before Teams so a mid-post kill still leaves the day retryable.
  * @returns {{ ok: boolean, empty?: boolean, updateCount?: number, error?: string, formatted?: object }}
  */
-async function attemptDay(day, log, dryRun) {
+async function attemptDay(day, log, dryRun, state = null, attempt = 1) {
   const targetDate = { year: day.year, month: day.month, day: day.day };
   const dateLabel = mmddyyyy(targetDate);
 
@@ -97,17 +112,29 @@ async function attemptDay(day, log, dryRun) {
     return { ok: true, empty: true, updateCount: 0 };
   }
 
+  // Persist pending BEFORE opening Teams — if Windows kills the task mid-post,
+  // the next recovery trigger still sees this day as incomplete.
+  if (state) {
+    markAttempt(state, day.key, attempt, 'posting_to_teams');
+  }
+
   log.info(`Posting ${dateLabel} to Teams ${config.teams.channelName}`);
-  const posted = await postToTeams(formatted.payloadText, formatted.payloadHtml, {
-    headed: process.env.EOD_HEADED === '1',
-    blocks: formatted.blocks,
-  });
+  const posted = await withTimeout(
+    postToTeams(formatted.payloadText, formatted.payloadHtml, {
+      headed: process.env.EOD_HEADED === '1',
+      blocks: formatted.blocks,
+    }),
+    config.eod.postTimeoutMs,
+    `Teams post for ${day.key}`
+  );
   log.info('Teams post complete', { date: dateLabel, ...posted });
   return { ok: true, empty: false, updateCount: formatted.updateCount, posted };
 }
 
 /**
  * Gatekeeper: up to maxAttempts, 10 min apart; stop on first success.
+ * Soft failures stay in-process. OS kills are recovered by the scheduled
+ * 10-minute recovery triggers (pending/failed days remain eligible).
  */
 async function processDayWithRetries(day, state, log, dryRun) {
   const maxAttempts = config.eod.maxAttempts;
@@ -120,7 +147,7 @@ async function processDayWithRetries(day, state, log, dryRun) {
     });
 
     try {
-      const result = await attemptDay(day, log, dryRun);
+      const result = await attemptDay(day, log, dryRun, state, attempt);
       if (!result.ok) {
         lastError = result.error || 'attempt failed';
         markAttempt(state, day.key, attempt, lastError);

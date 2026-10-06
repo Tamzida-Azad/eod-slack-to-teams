@@ -118,11 +118,12 @@ MM/DD/YYYY
 | Setting | Value |
 |---------|--------|
 | Task name | `SJ-EOD-Slack-To-Teams` |
-| Trigger | Weekly Mon–Fri at **11:30 PM** (local Dhaka machine time) |
+| Trigger | Weekdays **11:30 / 11:40 / 11:50 PM**, plus **every 10 min 12:00–1:20 AM** (Tue–Sat) for kill recovery |
 | Action | `scripts\run-daily.bat` |
 | Missed start | `StartWhenAvailable` — when the PC comes back on, Windows starts the task once |
+| Concurrent | `IgnoreNew` — if the gatekeeper is still running, recovery slots are skipped |
 | Logon | Interactive (user must be able to run a browser session) |
-| Time limit | 2 hours (covers scrape/post + up to ~10×10 min retries) |
+| Time limit | 3 hours (covers scrape/post + up to ~10×10 min in-process retries) |
 
 Register / refresh the task:
 
@@ -144,12 +145,14 @@ Start-ScheduledTask -TaskName 'SJ-EOD-Slack-To-Teams'
 
 For **each** day that still needs a post:
 
-1. Attempt scrape → format → Teams post.
+1. Attempt scrape → format → **checkpoint `pending`** → Teams post (5 min post timeout).
 2. On **success** → mark day `posted` (or `empty`) and **stop** further retries for that day.
-3. On **failure** → wait **10 minutes**, try again.
-4. After **10** failures → mark day `failed` and move on (does not block other days).
+3. On **failure** → wait **10 minutes**, try again (up to **10** attempts in one process).
+4. After **10** failures in one process → mark day `failed`, then exit.
+5. **Recovery:** if Windows kills the task mid-post (`0x41306`), or a day is still `pending`/`failed`, the next **10-minute recovery trigger** starts a fresh run and tries again until `posted`/`empty`.
+6. Member names are posted **without Slack status emojis**; task `:)` shortcodes are converted so Teams does not glue the next name onto the prior line.
 
-Success on attempt 5 means attempts 6–10 are **not** run.
+Success on attempt 5 means attempts 6–10 are **not** run in that process.
 
 ---
 
@@ -164,9 +167,9 @@ Tracks:
   - `posted` — successfully sent to Teams
   - `empty` — window had no messages; treated as done
   - `pending` — failed attempt(s), may retry
-  - `failed` — exhausted 10 attempts
+  - `failed` — exhausted 10 attempts in one process (still eligible for the next recovery run)
 
-Days already `posted` / `empty` / `failed` are not auto-reposted.
+Days already `posted` / `empty` are not auto-reposted. `pending` / `failed` stay eligible until success.
 
 ---
 

@@ -64,6 +64,7 @@ function sanitizeForTeamsTyping(text) {
  * Type one run with the keyboard only (Teams CKEditor-safe).
  *
  * Bold/italic: type → select line (Shift+Home) → Ctrl+B/I → End (collapse).
+ * italic-small: same as italic, plus fontSize 2 (small) while selected.
  * Do NOT use DOM insertNode/insertHTML here — those drop names or hit TrustedHTML.
  * Do NOT leave a selection when returning — Shift+Enter would eat the last char.
  * Do NOT press Escape after typing — it can blur the composer and drop later lines.
@@ -74,12 +75,21 @@ async function typeWithStyle(page, text, style) {
 
   await page.keyboard.type(value, { delay: 3 });
 
-  if (style !== 'bold' && style !== 'italic') return;
+  if (style !== 'bold' && style !== 'italic' && style !== 'italic-small') return;
 
   await page.waitForTimeout(40);
   await page.keyboard.press('End');
   await page.keyboard.press('Shift+Home');
   await page.keyboard.press(style === 'bold' ? 'Control+B' : 'Control+I');
+  if (style === 'italic-small') {
+    await page.evaluate(() => {
+      try {
+        document.execCommand('fontSize', false, '2');
+      } catch {
+        /* Teams may ignore; italic still applied */
+      }
+    });
+  }
   await page.keyboard.press('End');
   await page.waitForTimeout(40);
 

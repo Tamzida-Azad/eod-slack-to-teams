@@ -40,7 +40,7 @@ Assume PC was off Mon 8th and Tue 9th nights, and wakes **Wed 10th at 11:00 AM**
 
 Clients can tell days apart because the **header date** is always the EOD’s calendar date (not the run date). Catch-up posts also use footer:
 
-`EOD Automation · Catch-up for MM/DD/YYYY`
+`EOD Scheduled by Cursor AI · Catch-up for MM/DD/YYYY`
 
 ---
 

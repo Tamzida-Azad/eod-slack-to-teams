@@ -8,7 +8,7 @@
  * - Name-like mid segments (e.g. proper names in ticket titles) stay in title
  * - Simple bullets (no #ticket): compact, no blank lines between them
  * - Blank line between members
- * - Footer: italic EOD Automation line (optional catch-up date)
+ * - Footer: small italic "EOD Scheduled by Cursor AI" (optional catch-up date)
  */
 
 function dhakaDateParts(date = new Date()) {
@@ -196,8 +196,8 @@ function formatEod(scrape, options = {}) {
   });
 
   const FOOTER = options.catchUp
-    ? `EOD Automation · Catch-up for ${dateLabel}`
-    : 'EOD Automation';
+    ? `EOD Scheduled by Cursor AI · Catch-up for ${dateLabel}`
+    : 'EOD Scheduled by Cursor AI';
 
   const payloadText = [
     header,
@@ -265,7 +265,9 @@ function buildHtml(mmddyyyy, people, footer) {
   });
 
   parts.push(spacer);
-  parts.push(`<div><i><em>${escapeHtml(footer)}</em></i></div>`);
+  parts.push(
+    `<div style="font-size:11px;font-style:italic"><i><em>${escapeHtml(footer)}</em></i></div>`
+  );
   return parts.join('');
 }
 
@@ -297,7 +299,7 @@ function buildBlocks(mmddyyyy, people, footer) {
   });
 
   blocks.push({ style: 'spacer' });
-  blocks.push({ style: 'italic', text: footer });
+  blocks.push({ style: 'italic-small', text: footer });
   return blocks;
 }
 
